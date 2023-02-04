@@ -1,0 +1,310 @@
+#!/bin/bash
+
+path=$1
+cd $path
+
+jsonDATA="{
+   "index" : ,
+   "required" : {
+      "files": [],
+      "directories" : []
+   },
+   "other" : {
+      "files": [],
+      "directories" : []
+   }
+}"
+
+
+for dir in $(ls -R $path | grep ":" | sed 's/://');do
+  #echo $path/$dir
+  #top=$PWD
+  #currentPath="${top}/${dir}"
+  #echo $currentPath
+  if [[ -e $dir/dir.json ]]; then
+  # creates json 
+	#echo found json
+	#echo $dir
+	echo "$jsonDATA" > $dir/dir.json
+ 
+
+
+  else
+   #there is no json, we create it.
+	#echo not found json
+	#echo $dir
+	touch $dir/dir.json
+	echo "$jsonDATA" > $dir/dir.json 
+
+  fi
+
+  otherDirStripped=""
+
+  otherDirectories=""
+  otherDirectoryField=""
+  for element in $(ls -l $dir | grep '^d' | awk '{ print $9 }'); do
+	   otherDirStripped=${element##*/}
+		otherDirectories+='"'
+		otherDirectories+="${otherDirStripped}" ;
+		otherDirectories+='",'
+      done
+      #echo $otherDirectories
+		length=${#otherDirectories}
+		if [[ $length != 0 ]]; then
+			otherDirectoryField=${otherDirectories::-1}
+		else
+			otherDirectoryField=""
+		fi
+  #echo $otherDirectoryField
+  filesWithinDir=""
+  unset arrayOfAllFiles 
+  #declare an array for all files in dir
+  declare -a arrayOfAllFiles
+  for element in $(ls -l --hide="dir.json" $dir | grep ^- | awk '{print $9}'); do
+	    
+		 arrayOfAllFiles+=($element)
+
+	    filesWithinDir+='"'
+		 filesWithinDir+="${element}";
+		 filesWithinDir+='",'
+		 done
+		 lengthFile=${#filesWithinDir}
+		 if [[ $lengthFile != 0 ]]; then
+         filesWithinDir=${filesWithinDir::-1}
+		 else
+			filesWithinDir=""
+		 fi
+  #echo $filesWithinDir
+<<comment
+    echo array check $dir 
+    for element in "${arrayOfAllFiles[@]}"
+      do
+         echo "$element"
+      done
+comment
+
+  unset arrayIndex
+  unset arrayRequired
+  unset required
+  unset index
+
+  if [[ -e $dir/README ]]; then
+	 #echo readme found
+	 #echo $dir
+	 var1=$(awk 'NR==1' $dir/README)
+	 var2=$(awk 'NR==2' $dir/README)
+	 count=0
+	 #echo var1 and var2:
+    #echo $var1
+	 #echo $var2
+	 temp1=${var1##*:}
+	 temp2=${var2##*:}
+	 #echo temp1 and temp2:
+	 #echo $temp1
+	 #echo $temp2
+
+	 var1Prefix="${var1%%:*}"
+	 
+	 #echo var1Prefix and var2Prefix:
+
+	 #echo $var1Prefix
+	 #echo check
+
+	 var2Prefix="${var2%%:*}"
+	 #echo $var2Prefix
+	 #echo check2
+
+	 if [ "$var1Prefix" == "index" ]; then
+		index=${var1##*:}
+		IFS=':' read -r -a arrayIndex <<< $var1
+		unset arrayIndex[0]
+    elif [ "$var2Prefix" == "index" ]; then
+	   index=${var2##*:}
+		IFS=':' read -r -a arrayIndex <<< $var2
+		unset arrayIndex[0]
+	 else
+		index="empty"
+		declare -a arrayIndex=()
+	 fi 
+	 
+<<comment 
+	 echo index array is 
+	 for element in "${arrayIndex[@]}"
+      do
+         echo "$element"
+      done
+comment
+
+
+
+
+     if [ "$var1Prefix" == "required" ]; then
+      required=${var1##*:}
+      IFS=':' read -r -a arrayRequired <<< $var1
+      unset arrayRequired[0]
+     elif [ "$var2Prefix" == "required" ]; then
+      required=${var2##*:}
+      IFS=':' read -r -a arrayRequired <<< $var2
+      unset arrayRequired[0]
+     else
+      required="empty"
+	#	declare -a arrayRequired=()
+
+	  fi
+     
+	  if [[ $required != "empty" ]]; then
+		requiredAsString=$( IFS=$','; echo "${arrayRequired[*]}" )
+	  else
+		requiredAsString="empty"
+		fi
+
+ <<comment
+		echo Required Array in $dir
+
+		    for element in "${arrayRequired[@]}"
+      do
+         echo "$element"
+      done
+comment
+
+		# testquote=($ awk -F, -v OFS='","' -v q='"' '{$1=$1; print q $0 q}' <<< $requiredAsString)
+	  stringTest='"'${requiredAsString//,/\", \"}'"'
+	  #stringTest2=$(awk -f comma.csv <<< $requiredAsString)
+
+	  
+
+	  unset lastArray
+	  declare -a lastArray
+
+     for element in "${arrayIndex[@]}"
+      do
+         lastArray+=("$element")
+		done
+
+		for element in "${arrayRequired[@]}"
+      do
+         lastArray+=("$element")
+      done
+	  lastArray=( $(echo ${arrayOfAllFiles[@]} ${lastArray[@]} | tr ' ' '\n' | sort | uniq -u))
+
+	  for element in "${lastArray[@]}"
+      do
+			element='"'"$element"'"'
+         echo "$element"
+      done
+
+
+
+		if [ ${#lastArray[@]} -eq 0 ]; then
+      stringDifferenceReq=""
+     else
+      stringDifferenceReq=$( IFS=$','; echo "${lastArray[*]}" )
+      fi
+
+
+
+      
+		for element in "${arrayRequired[@]}"
+      do
+         element='"'"$element"'"'
+        # echo "$element"
+      done
+		if [[ $required != "empty" ]]; then
+      requiredAsString=$( IFS=$','; echo "${arrayRequired[*]}" )
+     else
+      requiredAsString=""
+      fi
+
+
+
+	  if [ $index != "empty" ] && [ $required == "empty" ]; then 
+	  printf '{
+   "index" : "%s",
+   "required" : {
+      "files": [],
+      "directories" : []
+   },
+   "other" : {
+      "files": [%s],
+      "directories" : [%s]
+   }
+}' $index $stringDifferenceReq $otherDirectoryField > $dir/dir.json
+    fi
+
+
+
+	 if [ $index == "empty" ] && [ "$requiredAsString" != "empty" ]; then
+     printf '{
+   "index" : "",
+   "required" : {
+      "files": [%s],
+      "directories" : []
+   },
+   "other" : {
+      "files": [%s],
+      "directories" : [%s]
+   }
+}' $requiredAsString $stringDifferenceReq $otherDirectoryField > $dir/dir.json
+    fi
+
+	 if [ $index != "empty" ] && [ "$requiredAsString" != "empty" ]; then
+     printf '{
+   "index" : "%s",
+   "required" : {
+      "files": [%s],
+      "directories" : []
+   },
+   "other" : {
+      "files": [%s],
+      "directories" : [%s]
+   }
+}' $index $requiredAsString $stringDifferenceReq $otherDirectoryField > $dir/dir.json
+
+    fi
+
+    if [ $index == "empty" ] && [ "$requiredAsString" == "empty" ]; then
+     printf '{
+   "index" : "",
+   "required" : {
+      "files": [],
+      "directories" : []
+   },
+   "other" : {
+      "files": [%s],
+      "directories" : [%s]
+   }
+}' $filesWithinDir $otherDirectoryField > $dir/dir.json
+
+    fi
+       
+
+
+    else
+     #if README doesnt exist
+
+	  printf '{
+   "index" : "",
+   "required" : {
+      "files": [],
+      "directories" : []
+   },
+   "other" : {
+      "files": [%s],
+      "directories" : [%s]
+   }
+}' $filesWithinDir $otherDirectoryField > $dir/dir.json
+    fi
+
+
+	 
+	 #echo "{" > dirtest.json
+    #echo '    "index" :'  ""$(grep index README | sed 's/index://')"" >> dirtest.json
+	 #echo '    "required" :'  ""$(grep required README | sed 's/required://')"" >> dirtest.json
+
+	 #echo "}" >> dirtest.json
+
+   #else
+    #if there is not README, leave put all files in json
+
+ # fi
+ done
